@@ -1,0 +1,5 @@
+shiny
+httpx
+dotenv
+environ-config
+msgspec

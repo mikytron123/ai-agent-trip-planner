@@ -1,0 +1,9 @@
+fastapi[standard]
+pydantic
+msgspec
+crewai
+httpx
+pandas
+openmeteo_requests
+requests_cache
+retry_requests

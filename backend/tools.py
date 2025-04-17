@@ -1,3 +1,4 @@
+from functools import lru_cache
 import httpx
 from pydantic import BaseModel, Field
 from typing import Literal, Type
@@ -7,15 +8,50 @@ import pandas as pd
 from retry_requests import retry
 from crewai.tools import BaseTool
 import os
+from dotenv import load_dotenv
+from dataclasses import dataclass
+
+import msgspec
+
+from appconfig import config
 
 
+API_KEY = config.api_key
+
+
+
+class Result(msgspec.Struct):
+    name: str
+    latitude: float
+    longitude: float
+    country_code: str
+    country: str
+
+
+class GeocodingSearchResponse(msgspec.Struct):
+    results: list[Result]
+
+
+@lru_cache
 def get_coordinates(city: str) -> tuple[float, float]:
     geocoding_url = "https://geocoding-api.open-meteo.com/v1/search"
     geocoding_params = {"name": city, "count": 1, "language": "en", "format": "json"}
-    resp = httpx.get(url=geocoding_url, params=geocoding_params).json()["results"][0]
+    resp = httpx.get(url=geocoding_url, params=geocoding_params)
+    if resp.status_code<200 or resp.status_code>200:
+        raise ValueError(f"Non 200 status code {resp.status_code}, {resp.content}")
+    decoder = msgspec.json.Decoder(type=GeocodingSearchResponse)
+    print(resp.content)
+    
+    try:
+        geocoding_response = decoder.decode(resp.content)
+    except Exception as e:
+        raise ValueError("City is not found")
+    
+    if geocoding_response.results[0].name != city:
+        raise ValueError("City is not found")
 
-    latitude = resp["latitude"]
-    longitude = resp["longitude"]
+    latitude = geocoding_response.results[0].latitude
+    longitude = geocoding_response.results[0].longitude
 
     return latitude, longitude
 
@@ -103,9 +139,6 @@ class AttractionTool(BaseTool):
     def _run(self, city: str, kinds: str) -> dict:
         latitude, longitude = get_coordinates(city)
         trip_url = "https://api.opentripmap.com/0.1/en/places/radius"
-        apikey = os.getenv("API_KEY")
-        if apikey is None:
-            raise ValueError("Missing Api Key for opentripmap")
         params = {
             "lang": "en",
             "radius": 5000,
@@ -114,7 +147,7 @@ class AttractionTool(BaseTool):
             "format": "json",
             "limit": 5,
             "kinds": kinds,
-            "apikey": apikey,
+            "apikey": API_KEY,
         }
 
         resp = httpx.get(url=trip_url, params=params).json()

@@ -1,9 +1,10 @@
-from fastapi import FastAPI,HTTPException
+from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from crewai import Agent, LLM, Task, Crew
-from tools import WeatherTool, AttractionTool,get_coordinates
+from tools import WeatherTool, AttractionTool, get_coordinates
 from appconfig import config
 import pandas as pd
+import time
 
 OLLAMA_HOST = config.ollama_host
 OLLAMA_PORT = config.ollama_port
@@ -25,17 +26,20 @@ app = FastAPI()
 
 @app.post("/agents/invoke")
 def invoke_agent(data: TripDetails) -> AgentOuput:
+    start_time = time.perf_counter()
     city = data.city
     start_date = data.start_date
     end_date = data.end_date
 
+    if pd.to_datetime(start_date) >= pd.to_datetime(end_date):
+        raise HTTPException(
+            status_code=400, detail="Start date must be before end date"
+        )
+
     try:
         _ = get_coordinates(city=city)
     except ValueError as e:
-        raise HTTPException(status_code=404,detail=str(e))
-    
-    if pd.to_datetime(start_date)>=pd.to_datetime(end_date):
-        raise HTTPException(status_code=400,detail="Start date must be before end date")
+        raise HTTPException(status_code=404, detail=str(e))
 
     llm = LLM(
         model=f"ollama/{OLLAMA_LLM}",
@@ -48,6 +52,7 @@ def invoke_agent(data: TripDetails) -> AgentOuput:
         backstory="You are an expert weather forecaster for {city}",
         llm=llm,
         allow_delegation=True,
+        max_iter=5,
     )
 
     attraction_agent = Agent(
@@ -55,20 +60,24 @@ def invoke_agent(data: TripDetails) -> AgentOuput:
         goal="Find attractions for a {city}",
         backstory="You are an expert trip planner for {city}",
         llm=llm,
+        max_iter=5,
     )
 
     weather_task = Task(
-        description="Get historical weather information between {start_date} and {end_date} for {city}",
-        expected_output="A summary of the weather conditions for the given time period",
+        description="Get historical weather information such as the temperature, amount of rain, amount of precipation and precipation hours between {start_date} and {end_date} for {city}",
+        expected_output="A summary of the weather information for the given time period.",
         agent=weather_agent,
         tools=[WeatherTool()],
     )
 
     attraction_task = Task(
-        description="Get top attractions for {city}",
+        description="Get information about attractions for {city}."
+        " Show museums or religion attractions when there is rain."
+        " Show architecture or natural attractions when there is no rain."
+        "If there are no attractions for a specific category, move to a different category",
         expected_output="A bullet point summary of attractions to visit based on the weather condtions such as rain."
-        " Show museums and religion attractions when there is rain. Show architecture and natural attractions when there is no rain."
-        " If there are no attractions for a specific category, move to a different category",
+        " "
+        " ",
         agent=attraction_agent,
         tools=[AttractionTool()],
         context=[weather_task],
@@ -82,5 +91,9 @@ def invoke_agent(data: TripDetails) -> AgentOuput:
 
     output = crew.kickoff(
         inputs={"city": city, "start_date": start_date, "end_date": end_date}
+    )
+    end_time = time.perf_counter()
+    print(
+        f"It took {end_time - start_time} seconds to run the api for {city}, {start_date}, {end_date}"
     )
     return AgentOuput(output=output.raw)

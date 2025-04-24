@@ -7,3 +7,5 @@ pandas
 openmeteo_requests
 requests_cache
 retry_requests
+arize-phoenix-otel
+openinference-instrumentation-crewai

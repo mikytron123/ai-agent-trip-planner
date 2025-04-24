@@ -5,11 +5,12 @@ from tools import WeatherTool, AttractionTool, get_coordinates
 from appconfig import config
 import pandas as pd
 import time
+from phoenix.otel import register
 
 OLLAMA_HOST = config.ollama_host
 OLLAMA_PORT = config.ollama_port
 OLLAMA_LLM = config.ollama_llm
-
+PHOENIX_COLLECTOR_ENDPOINT = config.phoenix_collector_endpoint
 
 class TripDetails(BaseModel):
     city: str
@@ -20,6 +21,12 @@ class TripDetails(BaseModel):
 class AgentOuput(BaseModel):
     output: str
 
+tracer_provider = register(
+    endpoint=PHOENIX_COLLECTOR_ENDPOINT,
+    project_name="crewai-tracing",
+    auto_instrument=True,
+    protocol="http/protobuf"
+)
 
 app = FastAPI()
 

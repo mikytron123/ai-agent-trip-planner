@@ -1,0 +1,13 @@
+pika
+msgpack
+minio
+psycopg[binary,pool]
+httpx
+pydantic
+openmeteo_requests
+requests_cache
+pandas
+retry_requests
+crewai
+arize-phoenix-otel
+openinference-instrumentation-crewai

@@ -1,0 +1,44 @@
+services:
+  postgresql-tasks:
+    image: postgres:latest
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 3s
+      timeout: 3s
+      retries: 10
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: postgres
+    ports:
+      - 5433:5432
+  
+  rabbitmq:
+    environment:
+        - RABBITMQ_DEFAULT_USER=user
+        - RABBITMQ_DEFAULT_PASS=password
+    image: rabbitmq:3-management
+    ports:
+      - 5672:5672
+      - 15672:15672
+  
+  minio:
+    image: minio/minio
+    restart: always
+    # entrypoint: sh
+    # create the bucket before starting the service
+    command: server --address ":9000" --console-address ":9001" /data
+    environment:
+      MINIO_ROOT_USER: minio
+      MINIO_ROOT_PASSWORD: miniopass # CHANGEME
+    ports:
+      - 9092:9000
+      - 127.0.0.1:9091:9001
+    volumes:
+      - minio_data:/data
+
+volumes:
+  minio_data:
+  weaviate_data:
+  ollama_data:
+  embed_data:

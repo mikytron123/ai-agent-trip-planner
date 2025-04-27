@@ -9,3 +9,5 @@ requests_cache
 retry_requests
 arize-phoenix-otel
 openinference-instrumentation-crewai
+pika
+psycopg[binary,pool]

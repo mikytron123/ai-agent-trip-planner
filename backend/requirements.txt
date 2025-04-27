@@ -2,7 +2,7 @@
 #    uv pip compile -o requirements.txt requirements.in
 aiohappyeyeballs==2.6.1
     # via aiohttp
-aiohttp==3.11.16
+aiohttp==3.11.18
     # via
     #   auth0-python
     #   instructor
@@ -46,7 +46,7 @@ cachetools==5.5.2
     # via google-auth
 cattrs==24.1.3
     # via requests-cache
-certifi==2025.1.31
+certifi==2025.4.26
     # via
     #   httpcore
     #   httpx
@@ -113,7 +113,7 @@ flatbuffers==25.2.10
     # via
     #   onnxruntime
     #   openmeteo-sdk
-frozenlist==1.5.0
+frozenlist==1.6.0
     # via
     #   aiohttp
     #   aiosignal
@@ -129,11 +129,11 @@ grpcio==1.71.0
     # via
     #   chromadb
     #   opentelemetry-exporter-otlp-proto-grpc
-h11==0.14.0
+h11==0.16.0
     # via
     #   httpcore
     #   uvicorn
-httpcore==1.0.8
+httpcore==1.0.9
     # via httpx
 httptools==0.6.4
     # via uvicorn
@@ -164,7 +164,7 @@ importlib-resources==6.5.2
     # via chromadb
 instructor==1.7.9
     # via crewai
-ipython==9.1.0
+ipython==9.2.0
     # via pyvis
 ipython-pygments-lexers==1.1.1
     # via ipython
@@ -180,7 +180,7 @@ jiter==0.8.2
     # via
     #   instructor
     #   openai
-json-repair==0.41.1
+json-repair==0.42.0
     # via crewai
 json5==0.12.0
     # via crewai
@@ -190,7 +190,7 @@ jsonref==1.1.0
     # via crewai
 jsonschema==4.23.0
     # via litellm
-jsonschema-specifications==2024.10.1
+jsonschema-specifications==2025.4.1
     # via jsonschema
 kubernetes==32.0.1
     # via chromadb
@@ -218,7 +218,7 @@ multidict==6.4.3
     #   yarl
 networkx==3.4.2
     # via pyvis
-numpy==2.2.4
+numpy==2.2.5
     # via
     #   chroma-hnswlib
     #   chromadb
@@ -228,9 +228,9 @@ oauthlib==3.2.2
     # via
     #   kubernetes
     #   requests-oauthlib
-onnxruntime==1.21.0
+onnxruntime==1.21.1
     # via chromadb
-openai==1.75.0
+openai==1.76.0
     # via
     #   crewai
     #   instructor
@@ -318,7 +318,7 @@ orjson==3.10.16
     # via chromadb
 overrides==7.7.0
     # via chromadb
-packaging==24.2
+packaging==25.0
     # via
     #   build
     #   huggingface-hub
@@ -334,11 +334,13 @@ pdfplumber==0.11.6
     # via crewai
 pexpect==4.9.0
     # via ipython
+pika==1.3.2
+    # via -r requirements.in
 pillow==11.2.1
     # via pdfplumber
 platformdirs==4.3.7
     # via requests-cache
-posthog==3.25.0
+posthog==4.0.0
     # via chromadb
 prompt-toolkit==3.0.51
     # via ipython
@@ -351,6 +353,12 @@ protobuf==5.29.4
     #   googleapis-common-protos
     #   onnxruntime
     #   opentelemetry-proto
+psycopg==3.2.6
+    # via -r requirements.in
+psycopg-binary==3.2.6
+    # via psycopg
+psycopg-pool==3.2.6
+    # via psycopg
 ptyprocess==0.7.0
     # via pexpect
 pure-eval==0.2.3
@@ -444,7 +452,7 @@ rich==13.9.4
     #   instructor
     #   rich-toolkit
     #   typer
-rich-toolkit==0.14.1
+rich-toolkit==0.14.3
     # via fastapi-cli
 rpds-py==0.24.0
     # via
@@ -508,6 +516,8 @@ typing-extensions==4.13.2
     #   openai
     #   openinference-instrumentation-crewai
     #   opentelemetry-sdk
+    #   psycopg
+    #   psycopg-pool
     #   pydantic
     #   pydantic-core
     #   referencing
@@ -518,7 +528,7 @@ typing-inspection==0.4.0
     # via pydantic
 tzdata==2025.2
     # via pandas
-url-normalize==2.2.0
+url-normalize==2.2.1
     # via requests-cache
 urllib3==2.4.0
     # via
@@ -527,9 +537,9 @@ urllib3==2.4.0
     #   requests
     #   requests-cache
     #   retry-requests
-uv==0.6.14
+uv==0.6.17
     # via crewai
-uvicorn==0.34.1
+uvicorn==0.34.2
     # via
     #   chromadb
     #   fastapi

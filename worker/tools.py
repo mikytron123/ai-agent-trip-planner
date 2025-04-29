@@ -33,7 +33,7 @@ def get_coordinates(city: str) -> tuple[float, float]:
     geocoding_params = {"name": city, "count": 1, "language": "en", "format": "json"}
     resp = httpx.get(url=geocoding_url, params=geocoding_params)
     if resp.status_code < 200 or resp.status_code > 200:
-        raise ValueError(f"Non 200 status code {resp.status_code}, {resp.content}")
+        raise ValueError(f"Non 200 status code {resp.status_code}, {resp.content.decode()}")
     decoder = msgspec.json.Decoder(type=GeocodingSearchResponse)
 
     try:
@@ -100,7 +100,7 @@ class WeatherTool(BaseTool):
             raise ValueError("response is empty")
         df_data = {}
         for i, v in enumerate(daily_vars):
-            df_data[v] = daily.Variables(i).ValuesAsNumpy()  # type: ignore
+            df_data[v] = daily.Variables(i).ValuesAsNumpy().tolist()  # type: ignore
         dates = pd.date_range(
             start=pd.to_datetime(daily.Time(), unit="s", utc=True),
             end=pd.to_datetime(daily.TimeEnd(), unit="s", utc=True),

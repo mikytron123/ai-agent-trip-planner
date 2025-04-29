@@ -1,7 +1,7 @@
+from typing import TypedDict
 import pika
 import sys
 import os
-import time
 import msgpack
 import psycopg
 import io
@@ -9,7 +9,10 @@ from minio import Minio
 from minio.error import S3Error
 from appconfig import config
 from crewai import Agent, LLM, Task, Crew
+from crewai.project import CrewBase, agent, task, crew
+from crewai.agents.agent_builder.base_agent import BaseAgent
 from tools import WeatherTool, AttractionTool
+from pydantic import TypeAdapter, ValidationError
 from phoenix.otel import register
 import datetime
 
@@ -36,65 +39,76 @@ OLLAMA_PORT = config.ollama_port
 OLLAMA_LLM = config.ollama_llm
 PHOENIX_COLLECTOR_ENDPOINT = config.phoenix_collector_endpoint
 
-# tracer_provider = register(
-#     endpoint=PHOENIX_COLLECTOR_ENDPOINT,
-#     project_name="crewai-tracing",
-#     auto_instrument=True,
-#     protocol="http/protobuf",
-# )
+tracer_provider = register(
+    endpoint=PHOENIX_COLLECTOR_ENDPOINT,
+    project_name="crewai-tracing",
+    auto_instrument=True,
+    protocol="http/protobuf",
+    batch=True,
+)
 
+class Payload(TypedDict):
+    task_id:str
+    city: str
+    start_date: str
+    end_date:str
 
-def create_crew() -> Crew:
-    """
-    Creates a multi agent crew
-    """
-    llm = LLM(
-        model=f"ollama/{OLLAMA_LLM}",
-        base_url=f"http://{OLLAMA_HOST}:{OLLAMA_PORT}",
-        timeout=120,
-    )
-    weather_agent = Agent(
-        role="Weather Forecaster",
-        goal="Getting weather details for a {city} between {start_date} and {end_date}",
-        backstory="You are an expert weather forecaster for {city}",
-        llm=llm,
-        allow_delegation=True,
-        max_iter=5,
-    )
+def create_crew_yaml() -> Crew:
+    @CrewBase
+    class MultiAgentCrew:
+        agents: list[BaseAgent]
+        tasks: list[Task]
 
-    attraction_agent = Agent(
-        role="Trip Planner",
-        goal="Find attractions for a {city}",
-        backstory="You are an expert trip planner for {city}",
-        llm=llm,
-        max_iter=5,
-    )
+        agents_config = "config/agents.yaml"
+        tasks_config = "config/task.yaml"
 
-    weather_task = Task(
-        description="Get historical weather information such as the temperature, amount of rain, amount of precipation and precipation hours between {start_date} and {end_date} for {city}",
-        expected_output="A summary of the weather information for the given time period.",
-        agent=weather_agent,
-        tools=[WeatherTool()],
-    )
+        llm = LLM(
+            model=f"ollama/{OLLAMA_LLM}",
+            base_url=f"http://{OLLAMA_HOST}:{OLLAMA_PORT}",
+            timeout=120,
+            temperature=0.1,
+        )
 
-    attraction_task = Task(
-        description="Get information about attractions for {city}."
-        " Show museums or religion attractions when there is rain."
-        " Show architecture or natural attractions when there is no rain."
-        "If there are no attractions for a specific category, move to a different category",
-        expected_output="A bullet point summary of attractions to visit based on the weather condtions such as rain.",
-        agent=attraction_agent,
-        tools=[AttractionTool()],
-        context=[weather_task],
-    )
+        @agent
+        def weather_agent(self) -> Agent:
+            return Agent(
+                config=self.agents_config["weather"],  # type: ignore[index]
+                llm=self.llm,
+                allow_delegation=True,
+                max_iter=5,
+            )
 
-    crew = Crew(
-        agents=[weather_agent, attraction_agent],
-        tasks=[weather_task, attraction_task],
-        verbose=True,
-    )
+        @agent
+        def attractions_agent(self) -> Agent:
+            return Agent(
+                config=self.agents_config["trip"],  # type: ignore[index]
+                llm=self.llm,
+                allow_delegation=True,
+                max_iter=5,
+            )
 
-    return crew
+        @task
+        def weather_task(self) -> Task:
+            return Task(
+                config=self.tasks_config["weather_task"],  # type: ignore[index]
+                agent=self.weather_agent(),
+                tools=[WeatherTool()],
+            )
+
+        @task
+        def attraction_task(self) -> Task:
+            return Task(
+                config=self.tasks_config["attraction_task"],  # type: ignore[index]
+                agent=self.attractions_agent(),
+                tools=[AttractionTool()],
+                context=[self.weather_task()],
+            )
+
+        @crew
+        def crew(self) -> Crew:
+            return Crew(agents=self.agents, tasks=self.tasks, verbose=True)
+
+    return MultiAgentCrew().crew()
 
 
 def update_db(id: str, state: str):
@@ -108,7 +122,11 @@ def update_db(id: str, state: str):
         f"postgresql://{POSTGRES_USER}:{POSTGRES_PASS}@{POSTGRES_HOST}:{POSTGRES_PORT}/{POSTGRES_DB}"
     ) as conn:
         with conn.cursor() as cursor:
-            data = {"state": state, "updated_at": datetime.datetime.now(), "task_id": id}
+            data = {
+                "state": state,
+                "updated_at": datetime.datetime.now(),
+                "task_id": id,
+            }
             cursor.execute(
                 """Update tasks set state = %(state)s, updated_at = %(updated_at)s  where id = %(task_id)s""",
                 data,
@@ -185,9 +203,14 @@ def main():
 
     def callback(ch, method, properties, body):
         print(f" [x] Received {body}")
-
+        ta = TypeAdapter(Payload)
         data_decoded = msgpack.unpackb(body)
-
+        try:
+            data_decoded = ta.validate_python(data_decoded)
+        except ValidationError as e:
+            print(e)
+            raise(e)
+        
         task_id = data_decoded["task_id"]
         city = data_decoded["city"]
         start_date = data_decoded["start_date"]
@@ -195,7 +218,7 @@ def main():
 
         update_db(task_id, "running")
 
-        crew = create_crew()
+        crew = create_crew_yaml()
         output = crew.kickoff(
             inputs={"city": city, "start_date": start_date, "end_date": end_date}
         )

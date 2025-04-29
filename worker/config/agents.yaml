@@ -1,0 +1,16 @@
+weather:
+  role: >
+    Weather Forecaster
+  goal: >
+    Getting weather details for a {city} between {start_date} and {end_date}
+  backstory: >
+    You are an expert weather forecaster for {city}
+
+trip:
+  role: >
+    Trip Planner
+  goal: >
+    Find attractions for a {city}
+  backstory: >
+    You are an expert trip planner for {city}
+

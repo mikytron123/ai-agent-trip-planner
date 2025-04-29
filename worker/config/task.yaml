@@ -1,0 +1,14 @@
+weather_task:
+  description: >
+    Get historical weather information such as the temperature, amount of rain, amount of precipation and precipation hours between {start_date} and {end_date} for {city}
+  expected_output: >
+    A summary of the weather information for the given time period.
+
+attraction_task:
+  description: >
+    Get information about attractions for {city}.
+    Show museums or religion attractions when there is precipation.
+    Show architecture or natural attractions when there is no precipation.
+    If there are no attractions for a specific category, move to a different category  
+  expected_output: >
+    A bullet point summary of attractions to visit based on the weather condtions such as precipation.

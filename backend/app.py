@@ -4,12 +4,9 @@ from fastapi import Depends, FastAPI, HTTPException
 from minio import Minio, S3Error
 import msgpack
 from pydantic import BaseModel
-from crewai import Agent, LLM, Task, Crew
-from tools import WeatherTool, AttractionTool, get_coordinates
+from tools import get_coordinates
 from appconfig import config
 import pandas as pd
-import time
-from phoenix.otel import register
 import uuid
 import psycopg
 import pika
@@ -55,14 +52,6 @@ class AgentOuput(BaseModel):
 
 class DBStatus(BaseModel):
     state: str
-
-
-# tracer_provider = register(
-#     endpoint=PHOENIX_COLLECTOR_ENDPOINT,
-#     project_name="crewai-tracing",
-#     auto_instrument=True,
-#     protocol="http/protobuf",
-# )
 
 DATABASE_URL = f"postgresql://{POSTGRES_USER}:{POSTGRES_PASS}@{POSTGRES_HOST}:{POSTGRES_PORT}/{POSTGRES_DB}"
 
@@ -217,6 +206,20 @@ async def get_task_status(task_id: str, db_conn: psycopg.Connection = Depends(ge
 @app.post("/task/start", status_code=202)
 async def start_task(data: TripDetails, db_conn: psycopg.Connection = Depends(get_db)):
     data_dict = data.model_dump()
+    city = data.city
+    start_date = data.start_date
+    end_date = data.end_date
+    
+    if pd.to_datetime(start_date) >= pd.to_datetime(end_date):
+        raise HTTPException(
+            status_code=400, detail="Start date must be before end date"
+        )
+    
+    try:
+        _ = get_coordinates(city=city)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
     create_table(db_conn)
     creds = pika.PlainCredentials(username=RABBITMQ_USER, password=RABBITMQ_PASS)
     connection_params = pika.ConnectionParameters(
@@ -241,82 +244,7 @@ async def start_task(data: TripDetails, db_conn: psycopg.Connection = Depends(ge
         )
 
     channel.basic_publish(exchange="", routing_key=RABBITMQ_QUEUE, body=body)
-    print(" [x] Sent 'Hello World!'")
+    print("sent [x] data_dict")
     connection.close()
 
     return TaskDetails(task_id=task_id)
-
-
-@app.post("/agents/invoke")
-def invoke_agent(data: TripDetails) -> AgentOuput:
-    start_time = time.perf_counter()
-    city = data.city
-    start_date = data.start_date
-    end_date = data.end_date
-
-    if pd.to_datetime(start_date) >= pd.to_datetime(end_date):
-        raise HTTPException(
-            status_code=400, detail="Start date must be before end date"
-        )
-
-    try:
-        _ = get_coordinates(city=city)
-    except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
-
-    llm = LLM(
-        model=f"ollama/{OLLAMA_LLM}",
-        base_url=f"http://{OLLAMA_HOST}:{OLLAMA_PORT}",
-        timeout=120,
-    )
-    weather_agent = Agent(
-        role="Weather Forecaster",
-        goal="Getting weather details for a {city} between {start_date} and {end_date}",
-        backstory="You are an expert weather forecaster for {city}",
-        llm=llm,
-        allow_delegation=True,
-        max_iter=5,
-    )
-
-    attraction_agent = Agent(
-        role="Trip Planner",
-        goal="Find attractions for a {city}",
-        backstory="You are an expert trip planner for {city}",
-        llm=llm,
-        max_iter=5,
-    )
-
-    weather_task = Task(
-        description="Get historical weather information such as the temperature, amount of rain, amount of precipation and precipation hours between {start_date} and {end_date} for {city}",
-        expected_output="A summary of the weather information for the given time period.",
-        agent=weather_agent,
-        tools=[WeatherTool()],
-    )
-
-    attraction_task = Task(
-        description="Get information about attractions for {city}."
-        " Show museums or religion attractions when there is rain."
-        " Show architecture or natural attractions when there is no rain."
-        "If there are no attractions for a specific category, move to a different category",
-        expected_output="A bullet point summary of attractions to visit based on the weather condtions such as rain."
-        " "
-        " ",
-        agent=attraction_agent,
-        tools=[AttractionTool()],
-        context=[weather_task],
-    )
-
-    crew = Crew(
-        agents=[weather_agent, attraction_agent],
-        tasks=[weather_task, attraction_task],
-        verbose=True,
-    )
-
-    output = crew.kickoff(
-        inputs={"city": city, "start_date": start_date, "end_date": end_date}
-    )
-    end_time = time.perf_counter()
-    print(
-        f"It took {end_time - start_time} seconds to run the api for {city}, {start_date}, {end_date}"
-    )
-    return AgentOuput(output=output.raw)

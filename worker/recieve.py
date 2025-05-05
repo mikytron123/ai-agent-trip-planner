@@ -2,7 +2,7 @@ from typing import TypedDict
 import pika
 import sys
 import os
-import msgpack
+import msgspec
 import psycopg
 import io
 from minio import Minio
@@ -12,7 +12,6 @@ from crewai import Agent, LLM, Task, Crew
 from crewai.project import CrewBase, agent, task, crew
 from crewai.agents.agent_builder.base_agent import BaseAgent
 from tools import WeatherTool, AttractionTool
-from pydantic import TypeAdapter, ValidationError
 from phoenix.otel import register
 import datetime
 
@@ -47,11 +46,13 @@ tracer_provider = register(
     batch=True,
 )
 
-class Payload(TypedDict):
-    task_id:str
+
+class Payload(msgspec.Struct):
+    task_id: str
     city: str
     start_date: str
-    end_date:str
+    end_date: str
+
 
 def create_crew_yaml() -> Crew:
     @CrewBase
@@ -203,18 +204,14 @@ def main():
 
     def callback(ch, method, properties, body):
         print(f" [x] Received {body}")
-        ta = TypeAdapter(Payload)
-        data_decoded = msgpack.unpackb(body)
-        try:
-            data_decoded = ta.validate_python(data_decoded)
-        except ValidationError as e:
-            print(e)
-            raise(e)
-        
-        task_id = data_decoded["task_id"]
-        city = data_decoded["city"]
-        start_date = data_decoded["start_date"]
-        end_date = data_decoded["end_date"]
+
+        decoder = msgspec.msgpack.Decoder(type=Payload)
+        data_decoded = decoder.decode(body)
+
+        task_id = data_decoded.task_id
+        city = data_decoded.city
+        start_date = data_decoded.start_date
+        end_date = data_decoded.end_date
 
         update_db(task_id, "running")
 

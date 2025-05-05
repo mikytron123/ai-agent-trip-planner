@@ -2,7 +2,7 @@ from contextlib import asynccontextmanager
 from typing import Optional
 from fastapi import Depends, FastAPI, HTTPException
 from minio import Minio, S3Error
-import msgpack
+import msgspec
 from pydantic import BaseModel
 from tools import get_coordinates
 from appconfig import config
@@ -52,6 +52,7 @@ class AgentOuput(BaseModel):
 
 class DBStatus(BaseModel):
     state: str
+
 
 DATABASE_URL = f"postgresql://{POSTGRES_USER}:{POSTGRES_PASS}@{POSTGRES_HOST}:{POSTGRES_PORT}/{POSTGRES_DB}"
 
@@ -209,12 +210,12 @@ async def start_task(data: TripDetails, db_conn: psycopg.Connection = Depends(ge
     city = data.city
     start_date = data.start_date
     end_date = data.end_date
-    
+
     if pd.to_datetime(start_date) >= pd.to_datetime(end_date):
         raise HTTPException(
             status_code=400, detail="Start date must be before end date"
         )
-    
+
     try:
         _ = get_coordinates(city=city)
     except ValueError as e:
@@ -236,12 +237,8 @@ async def start_task(data: TripDetails, db_conn: psycopg.Connection = Depends(ge
         raise HTTPException(status_code=400, detail="Could not start task")
 
     data_dict["task_id"] = task_id
-    body = msgpack.packb(data_dict)
-
-    if not isinstance(body, bytes):
-        raise HTTPException(
-            status_code=400, detail="msgpack serialization is not bytes"
-        )
+    encoder = msgspec.msgpack.Encoder()
+    body = encoder.encode(data_dict)
 
     channel.basic_publish(exchange="", routing_key=RABBITMQ_QUEUE, body=body)
     print("sent [x] data_dict")

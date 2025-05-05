@@ -1,5 +1,5 @@
 pika
-msgpack
+msgspec
 minio
 psycopg[binary,pool]
 httpx

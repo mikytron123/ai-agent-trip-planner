@@ -27,7 +27,9 @@ def get_coordinates(city: str) -> tuple[float, float]:
     geocoding_params = {"name": city, "count": 1, "language": "en", "format": "json"}
     resp = httpx.get(url=geocoding_url, params=geocoding_params)
     if resp.status_code < 200 or resp.status_code > 200:
-        raise ValueError(f"Non 200 status code {resp.status_code}, {resp.content.decode()}")
+        raise ValueError(
+            f"Non 200 status code {resp.status_code}, {resp.content.decode()}"
+        )
     decoder = msgspec.json.Decoder(type=GeocodingSearchResponse)
 
     try:

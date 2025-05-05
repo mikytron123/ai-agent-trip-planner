@@ -40,6 +40,7 @@
 
 This is a multi AI Agent system for planning a trip in a city using historical weather data and nearby attractions. This project uses Ollama for interacting with local LLMs, FastAPI for the backend API, Shiny for the frontend ui. 
 
+![msedge_GT1QOlw4qJ](https://github.com/user-attachments/assets/48710e67-9536-4840-8eb4-9eab6809c07b)
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 

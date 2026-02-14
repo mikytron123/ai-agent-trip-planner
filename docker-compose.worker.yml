@@ -22,23 +22,20 @@ services:
       - 5672:5672
       - 15672:15672
   
-  minio:
-    image: minio/minio
-    restart: always
-    # entrypoint: sh
-    # create the bucket before starting the service
-    command: server --address ":9000" --console-address ":9001" /data
-    environment:
-      MINIO_ROOT_USER: minio
-      MINIO_ROOT_PASSWORD: miniopass # CHANGEME
+  rustfs:
     ports:
-      - 9092:9000
-      - 127.0.0.1:9091:9001
+      - 9000:9000
+      - 9001:9001
     volumes:
-      - minio_data:/data
+      - rustfs_data:/data
+      - rustfs_logs:/logs
+    environment:
+      - RUSTFS_ACCESS_KEY=rustfsadmin
+      - RUSTFS_SECRET_KEY=rustfsadmin
+      - RUSTFS_CONSOLE_ENABLE=true
+
+    image: rustfs/rustfs:latest
 
 volumes:
-  minio_data:
-  weaviate_data:
-  ollama_data:
-  embed_data:
+  rustfs_data:
+  rustfs_logs:

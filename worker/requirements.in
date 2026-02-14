@@ -1,6 +1,7 @@
 pika
 msgspec
-minio
+boto3
+types-boto3[essential]
 psycopg[binary,pool]
 httpx
 pydantic

@@ -7,6 +7,7 @@ SERVER_HOST = config.server_host
 SERVER_PORT = config.server_port
 task_id = None
 
+
 def poll_func() -> str:
     if task_id is not None:
         resp = httpx.get(
@@ -50,7 +51,6 @@ app_ui = ui.page_sidebar(
 
 # Define server
 def server(input: Inputs, output: Outputs, session: Session):
-
     current_data = reactive.value(task_output())
     polling_status = reactive.value(False)
     change_detected = reactive.value(False)
@@ -75,7 +75,7 @@ def server(input: Inputs, output: Outputs, session: Session):
     @reactive.event(input.task)
     def res():
         global task_id
-        start_date,end_date = input.date_range()
+        start_date, end_date = input.date_range()
         param = {
             "city": input.city(),
             "start_date": str(start_date),

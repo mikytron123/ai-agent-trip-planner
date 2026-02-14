@@ -1,7 +1,9 @@
 from contextlib import asynccontextmanager
 from typing import Optional
 from fastapi import Depends, FastAPI, HTTPException
-from minio import Minio, S3Error
+import boto3
+from botocore.client import Config
+from types_boto3_s3.client import S3Client
 import msgspec
 from pydantic import BaseModel
 from tools import get_coordinates
@@ -23,11 +25,11 @@ POSTGRES_PASS = config.postgres_pass
 POSTGRES_DB = config.postgres_db
 POSTGRES_PORT = config.postgres_port
 
-MINIO_HOST = config.minio_host
-MINIO_PORT = config.minio_port
-MINIO_ACCESS_KEY = config.minio_access_key
-MINIO_SECRET_KEY = config.minio_secret_key
-MINIO_BUCKET = config.minio_bucket
+RUSTFS_HOST = config.rustfs_host
+RUSTFS_PORT = config.rustfs_port
+RUSTFS_ACCESS_KEY = config.rustfs_access_key
+RUSTFS_SECRET_KEY = config.rustfs_secret_key
+RUSTFS_BUCKET = config.rustfs_bucket
 
 RABBITMQ_USER = config.rabbitmq_user
 RABBITMQ_PASS = config.rabbitmq_pass
@@ -121,9 +123,9 @@ def get_db() -> psycopg.Connection:
     return db_conn
 
 
-def read_text_from_minio(client: Minio, bucket_name: str, object_name: str):
+def read_text_from_rustfs(client: S3Client, bucket_name: str, object_name: str):
     """
-    Connects to MinIO, retrieves an object, and returns its content as a string.
+    Connects to rustfs, retrieves an object, and returns its content as a string.
 
     Args:
         bucket_name (str): Name of the bucket containing the object.
@@ -132,40 +134,22 @@ def read_text_from_minio(client: Minio, bucket_name: str, object_name: str):
     Returns:
         str: The content of the text file as a string, or None if an error occurs.
     """
-    # --- 1. Initialize MinIO Client ---
-    # Create a MinIO client instance.
-    # Set secure=False if running locally without HTTPS.
-
-    # --- 2. Retrieve the Object ---
+    # --- 1. Retrieve the Object ---
     try:
-        # Get the object data from MinIO
+        # Get the object data from RustFS
         # The response object is a stream
-        response = client.get_object(bucket_name, object_name)
+        response = client.get_object(Bucket=bucket_name, Key=object_name)
         print(
             f"Successfully initiated retrieval of '{object_name}' from bucket '{bucket_name}'."
         )
 
-        # --- 3. Read and Decode the Data ---
-        # Read the data from the stream and decode it from bytes to string (assuming UTF-8)
-        # Using 'with' ensures the response stream is properly closed afterwards
-        with response:
-            file_content_bytes = response.read()
-            file_content_string = file_content_bytes.decode("utf-8")
-            print("Successfully read and decoded content.")
-            return file_content_string
+        # --- 2. Read and Decode the Data ---
 
-    except S3Error as e:
-        # Handle MinIO-specific errors (e.g., NoSuchKey, NoSuchBucket)
-        print(
-            f"MinIO S3 Error retrieving object '{object_name}' from bucket '{bucket_name}': {e}"
-        )
-        if e.code == "NoSuchKey":
-            print(
-                f"Error: The object '{object_name}' does not exist in bucket '{bucket_name}'."
-            )
-        elif e.code == "NoSuchBucket":
-            print(f"Error: The bucket '{bucket_name}' does not exist.")
-        return None
+        file_content_bytes = response["Body"].read()
+        file_content_string = file_content_bytes.decode("utf-8")
+        print("Successfully read and decoded content.")
+        return file_content_string
+
     except Exception as e:
         # Handle other potential errors (e.g., network issues, decoding errors)
         print(f"An unexpected error occurred during object retrieval or reading: {e}")
@@ -174,15 +158,16 @@ def read_text_from_minio(client: Minio, bucket_name: str, object_name: str):
 
 @app.get("/tasks/{task_id}/output")
 async def get_task_output(task_id: str):
-    MINIO_ENDPOINT = f"{MINIO_HOST}:{MINIO_PORT}"
+    RUSTFS_ENDPOINT = f"{RUSTFS_HOST}:{RUSTFS_PORT}"
 
-    client = Minio(
-        endpoint=MINIO_ENDPOINT,
-        access_key=MINIO_ACCESS_KEY,
-        secret_key=MINIO_SECRET_KEY,
-        secure=False,
+    client = boto3.client(
+        "s3",
+        endpoint_url=RUSTFS_ENDPOINT,
+        aws_access_key_id=RUSTFS_ACCESS_KEY,
+        aws_secret_access_key=RUSTFS_SECRET_KEY,
+        config=Config(signature_version="s3v4"),
     )
-    content = read_text_from_minio(client, MINIO_BUCKET, f"{task_id}.txt")
+    content = read_text_from_rustfs(client, RUSTFS_BUCKET, f"{task_id}.txt")
     if content is None:
         print("exception in backend")
         raise HTTPException(status_code=400, detail="cant find obj")

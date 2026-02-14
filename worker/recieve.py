@@ -1,18 +1,19 @@
-from typing import TypedDict
+import boto3
+from botocore.client import Config
+from botocore.exceptions import ClientError
 import pika
 import sys
 import os
 import msgspec
 import psycopg
 import io
-from minio import Minio
-from minio.error import S3Error
 from appconfig import config
 from crewai import Agent, LLM, Task, Crew
 from crewai.project import CrewBase, agent, task, crew
 from crewai.agents.agent_builder.base_agent import BaseAgent
 from tools import WeatherTool, AttractionTool
 from phoenix.otel import register
+from types_boto3_s3.client import S3Client
 import datetime
 
 POSTGRES_HOST = config.postgres_host
@@ -27,11 +28,11 @@ RABBITMQ_HOST = config.rabbitmq_host
 RABBITMQ_PORT = config.rabbitmq_port
 RABBITMQ_QUEUE = config.rabbitmq_queue
 
-MINIO_HOST = config.minio_host
-MINIO_PORT = config.minio_port
-MINIO_ACCESS_KEY = config.minio_access_key
-MINIO_SECRET_KEY = config.minio_secret_key
-MINIO_BUCKET = config.minio_bucket
+RUSTFS_HOST = config.rustfs_host
+RUSTFS_PORT = config.rustfs_port
+RUSTFS_ACCESS_KEY = config.rustfs_access_key
+RUSTFS_SECRET_KEY = config.rustfs_secret_key
+RUSTFS_BUCKET = config.rustfs_bucket
 
 OLLAMA_HOST = config.ollama_host
 OLLAMA_PORT = config.ollama_port
@@ -135,29 +136,42 @@ def update_db(id: str, state: str):
             conn.commit()
 
 
-def upload_text_to_minio(
-    client: Minio, bucket_name: str, object_name: str, text_content: str
+def bucket_exists(s3_client: S3Client, bucket_name: str):
+    try:
+        s3_client.head_bucket(Bucket=bucket_name)
+        print(f"Bucket '{bucket_name}' exists.")
+        return True
+    except ClientError as e:
+        error_code = int(e.response["Error"]["Code"])
+        if error_code == 404:
+            print(f"Bucket '{bucket_name}' does not exist.")
+        elif error_code == 403:
+            print(f"Access to bucket '{bucket_name}' is forbidden.")
+        else:
+            print(f"An error occurred: {e}")
+        return False
+
+
+def upload_text_to_rustfs(
+    client: S3Client, bucket_name: str, object_name: str, text_content: str
 ):
     """
-    Connects to MinIO, ensures a bucket exists, and uploads text content as an object.
+    Connects to RustFS, ensures a bucket exists, and uploads text content as an object.
 
     Args:
-        client (Minior): Minio client
+        client (s3client): boto3 client
         bucket_name (str): Name of the bucket to upload to.
         object_name (str): Name of the object (file) in the bucket.
         text_content (str): The string content to upload.
     """
     # --- 1. Ensure Bucket Exists ---
     try:
-        found = client.bucket_exists(bucket_name)
+        found = bucket_exists(client, bucket_name)
         if not found:
-            client.make_bucket(bucket_name)
+            client.create_bucket(Bucket=bucket_name)
             print(f"Bucket '{bucket_name}' created successfully.")
         else:
             print(f"Bucket '{bucket_name}' already exists.")
-    except S3Error as e:
-        print(f"Error checking or creating bucket '{bucket_name}': {e}")
-        return
     except Exception as e:
         print(f"An unexpected error occurred during bucket handling: {e}")
         return
@@ -168,26 +182,19 @@ def upload_text_to_minio(
     try:
         text_bytes = text_content.encode("utf-8")
         text_stream = io.BytesIO(text_bytes)
-        stream_length = len(text_bytes)
     except Exception as e:
         print(f"Error preparing data for upload: {e}")
         return
 
     # --- 3. Upload the Object ---
     try:
-        result = client.put_object(
-            bucket_name,
-            object_name,
-            text_stream,
-            length=stream_length,
-            content_type="text/plain",  # Set the content type explicitly
+        client.put_object(
+            Bucket=bucket_name,
+            Key=object_name,
+            Body=text_stream,
+            ContentType="text/plain",  # Set the content type explicitly
         )
-        print(
-            f"Successfully uploaded '{object_name}' to bucket '{bucket_name}'. "
-            f"ETag: {result.etag}, Version ID: {result.version_id}"
-        )
-    except S3Error as e:
-        print(f"Error uploading object '{object_name}' to bucket '{bucket_name}': {e}")
+        print(f"Successfully uploaded '{object_name}' to bucket '{bucket_name}'. ")
     except Exception as e:
         print(f"An unexpected error occurred during upload: {e}")
 
@@ -220,17 +227,17 @@ def main():
             inputs={"city": city, "start_date": start_date, "end_date": end_date}
         )
 
-        MINIO_ENDPOINT = f"{MINIO_HOST}:{MINIO_PORT}"
+        RUSTFS_ENDPOINT = f"http://{RUSTFS_HOST}:{RUSTFS_PORT}"
         # --- Bucket and File Details ---
-
-        client = Minio(
-            endpoint=MINIO_ENDPOINT,
-            access_key=MINIO_ACCESS_KEY,
-            secret_key=MINIO_SECRET_KEY,
-            secure=False,
+        client = boto3.client(
+            "s3",
+            endpoint_url=RUSTFS_ENDPOINT,
+            aws_access_key_id=RUSTFS_ACCESS_KEY,
+            aws_secret_access_key=RUSTFS_SECRET_KEY,
+            config=Config(signature_version="s3v4"),
         )
 
-        upload_text_to_minio(client, MINIO_BUCKET, f"{task_id}.txt", output.raw)
+        upload_text_to_rustfs(client, RUSTFS_BUCKET, f"{task_id}.txt", output.raw)
         print(" [x] finished processing")
         update_db(task_id, "done")
 

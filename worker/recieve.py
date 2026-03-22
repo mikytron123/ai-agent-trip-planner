@@ -1,20 +1,22 @@
+import datetime
+import io
+import os
+import sys
+
 import boto3
+import msgspec
+import pika
+import psycopg
 from botocore.client import Config
 from botocore.exceptions import ClientError
-import pika
-import sys
-import os
-import msgspec
-import psycopg
-import io
-from appconfig import config
-from crewai import Agent, LLM, Task, Crew
-from crewai.project import CrewBase, agent, task, crew
+from crewai import LLM, Agent, Crew, Task
 from crewai.agents.agent_builder.base_agent import BaseAgent
-from tools import WeatherTool, AttractionTool
+from crewai.project import CrewBase, agent, crew, task
 from phoenix.otel import register
 from types_boto3_s3.client import S3Client
-import datetime
+
+from .appconfig import config
+from .tools import AttractionTool, WeatherTool
 
 POSTGRES_HOST = config.postgres_host
 POSTGRES_USER = config.postgres_user
@@ -122,18 +124,17 @@ def update_db(id: str, state: str):
     """
     with psycopg.connect(
         f"postgresql://{POSTGRES_USER}:{POSTGRES_PASS}@{POSTGRES_HOST}:{POSTGRES_PORT}/{POSTGRES_DB}"
-    ) as conn:
-        with conn.cursor() as cursor:
-            data = {
-                "state": state,
-                "updated_at": datetime.datetime.now(),
-                "task_id": id,
-            }
-            cursor.execute(
-                """Update tasks set state = %(state)s, updated_at = %(updated_at)s  where id = %(task_id)s""",
-                data,
-            )
-            conn.commit()
+    ) as conn, conn.cursor() as cursor:
+        data = {
+            "state": state,
+            "updated_at": datetime.datetime.now(),
+            "task_id": id,
+        }
+        cursor.execute(
+            """Update tasks set state = %(state)s, updated_at = %(updated_at)s  where id = %(task_id)s""",
+            data,
+        )
+        conn.commit()
 
 
 def bucket_exists(s3_client: S3Client, bucket_name: str):

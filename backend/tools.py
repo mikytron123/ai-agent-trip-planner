@@ -1,10 +1,9 @@
 from functools import lru_cache
-import httpx
 
+import httpx
 import msgspec
 
-from appconfig import config
-
+from .appconfig import config
 
 API_KEY = config.api_key
 

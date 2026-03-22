@@ -1,5 +1,5 @@
-from dotenv import load_dotenv
 import environ
+from dotenv import load_dotenv
 
 
 @environ.config(prefix="")

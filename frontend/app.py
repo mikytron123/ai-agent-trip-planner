@@ -1,7 +1,8 @@
-from shiny import App, Inputs, Outputs, Session, reactive, ui, render
 import datetime
+
 import httpx
 from appconfig import config
+from shiny import App, Inputs, Outputs, Session, reactive, render, ui
 
 SERVER_HOST = config.server_host
 SERVER_PORT = config.server_port

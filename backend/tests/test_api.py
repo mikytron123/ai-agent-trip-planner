@@ -1,7 +1,8 @@
-from fastapi.testclient import TestClient
 import os
 import sys
 from pathlib import Path
+
+from fastapi.testclient import TestClient
 
 path = os.getcwd()
 parent_path = Path().resolve().parent
@@ -10,7 +11,7 @@ if str(parent_path) not in sys.path:
     sys.path.append(str(parent_path))
 if path not in sys.path:
     sys.path.append(path)
-print(sys.path)
+
 import app
 
 client = TestClient(app.app)

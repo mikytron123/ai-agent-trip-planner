@@ -11,4 +11,6 @@ pandas
 retry_requests
 crewai
 arize-phoenix-otel
-openinference-instrumentation-crewai
+environ-config
+botocore
+dotenv

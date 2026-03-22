@@ -1,16 +1,16 @@
 from functools import lru_cache
-import httpx
-from pydantic import BaseModel, Field
 from typing import Literal, Type
-import openmeteo_requests
-import requests_cache
-import pandas as pd
-from retry_requests import retry
-from crewai.tools import BaseTool
 
+import httpx
 import msgspec
+import openmeteo_requests
+import pandas as pd
+import requests_cache
+from crewai.tools import BaseTool
+from pydantic import BaseModel, Field
+from retry_requests import retry
 
-from appconfig import config
+from .appconfig import config
 
 API_KEY = config.api_key
 

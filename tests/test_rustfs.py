@@ -1,20 +1,22 @@
 import uuid
-
+import os
+import sys
 import boto3
+from pathlib import Path
 import pytest
 from botocore.client import Config
 from testcontainers.core.container import DockerContainer
 
+path = os.getcwd()
+parent_path = Path(__file__).parent.resolve()
+
+if str(parent_path) not in sys.path:
+    sys.path.append(str(parent_path))
+if path not in sys.path:
+    sys.path.append(path)
+
 from backend.app import read_text_from_rustfs
 from worker.recieve import upload_text_to_rustfs
-
-# path = os.getcwd()
-# parent_path = Path(__file__).parent.resolve()
-
-# if str(parent_path) not in sys.path:
-#     sys.path.append(str(parent_path))
-# if path not in sys.path:
-#     sys.path.append(path)
 
 # print(sys.path)
 

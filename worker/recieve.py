@@ -2,11 +2,15 @@ import datetime
 import io
 import os
 import sys
+from unittest.mock import Mock
 
 import boto3
 import msgspec
 import pika
 import psycopg
+import sys
+import os
+from pathlib import Path
 from botocore.client import Config
 from botocore.exceptions import ClientError
 from crewai import LLM, Agent, Crew, Task
@@ -14,10 +18,15 @@ from crewai.agents.agent_builder.base_agent import BaseAgent
 from crewai.project import CrewBase, agent, crew, task
 from phoenix.otel import register
 from types_boto3_s3.client import S3Client
+if str(Path(__file__).parent) not in sys.path:
+    sys.path.append(str(Path(__file__).parent))
+if str(Path(__file__).parent.parent) not in sys.path:
+    sys.path.append(str(Path(__file__).parent.parent))
 
-from .appconfig import config
-from .tools import AttractionTool, WeatherTool
+from appconfig import config
+from tools import AttractionTool, WeatherTool
 
+USE_MOCK = config.use_mock
 POSTGRES_HOST = config.postgres_host
 POSTGRES_USER = config.postgres_user
 POSTGRES_PASS = config.postgres_pass
@@ -41,13 +50,77 @@ OLLAMA_PORT = config.ollama_port
 OLLAMA_LLM = config.ollama_llm
 PHOENIX_COLLECTOR_ENDPOINT = config.phoenix_collector_endpoint
 
-tracer_provider = register(
-    endpoint=PHOENIX_COLLECTOR_ENDPOINT,
-    project_name="crewai-tracing",
-    auto_instrument=True,
-    protocol="http/protobuf",
-    batch=True,
-)
+# tracer_provider = register(
+#     endpoint=PHOENIX_COLLECTOR_ENDPOINT,
+#     project_name="crewai-tracing",
+#     auto_instrument=True,
+#     protocol="http/protobuf",
+#     batch=True,
+# )
+
+
+@CrewBase
+class MultiAgentCrew:
+    agents: list[BaseAgent]
+    tasks: list[Task]
+
+    agents_config = "config/agents.yaml"
+    tasks_config = "config/task.yaml"
+
+    @agent
+    def weather_agent(self) -> Agent:
+        llm = LLM(
+            provider="ollama",
+            model=f"{OLLAMA_LLM}",
+            base_url=f"http://{OLLAMA_HOST}:{OLLAMA_PORT}/v1/",
+            api_key="ollama",
+            timeout=120,
+            temperature=0.1,
+        )
+        return Agent(
+            config=self.agents_config["weather"],  # type: ignore[index]
+            llm=llm,
+            allow_delegation=True,
+            max_iter=5,
+        )
+
+    @agent
+    def attractions_agent(self) -> Agent:
+        llm = LLM(
+            provider="ollama",
+            model=f"{OLLAMA_LLM}",
+            base_url=f"http://{OLLAMA_HOST}:{OLLAMA_PORT}/v1/",
+            api_key="ollama",
+            timeout=120,
+            temperature=0.1,
+        )
+        return Agent(
+            config=self.agents_config["trip"],  # type: ignore[index]
+            llm=llm,
+            allow_delegation=True,
+            max_iter=5,
+        )
+
+    @task
+    def weather_task(self) -> Task:
+        return Task(
+            config=self.tasks_config["weather_task"],  # type: ignore[index]
+            agent=self.weather_agent(),
+            tools=[WeatherTool()],
+        )
+
+    @task
+    def attraction_task(self) -> Task:
+        return Task(
+            config=self.tasks_config["attraction_task"],  # type: ignore[index]
+            agent=self.attractions_agent(),
+            tools=[AttractionTool()],
+            context=[self.weather_task()],
+        )
+
+    @crew
+    def crew(self) -> Crew:
+        return Crew(agents=self.agents, tasks=self.tasks, verbose=True)
 
 
 class Payload(msgspec.Struct):
@@ -57,62 +130,17 @@ class Payload(msgspec.Struct):
     end_date: str
 
 
-def create_crew_yaml() -> Crew:
-    @CrewBase
-    class MultiAgentCrew:
-        agents: list[BaseAgent]
-        tasks: list[Task]
+def create_crew_yaml(mock: bool) -> Crew:
 
-        agents_config = "config/agents.yaml"
-        tasks_config = "config/task.yaml"
+    if mock:
+        crew_mock = Mock()
+        output_mock = Mock()
+        crew_mock.kickoff.return_value = output_mock
+        output_mock.raw = "test"
+        return crew_mock
 
-        llm = LLM(
-            model=f"ollama/{OLLAMA_LLM}",
-            base_url=f"http://{OLLAMA_HOST}:{OLLAMA_PORT}",
-            timeout=120,
-            temperature=0.1,
-        )
-
-        @agent
-        def weather_agent(self) -> Agent:
-            return Agent(
-                config=self.agents_config["weather"],  # type: ignore[index]
-                llm=self.llm,
-                allow_delegation=True,
-                max_iter=5,
-            )
-
-        @agent
-        def attractions_agent(self) -> Agent:
-            return Agent(
-                config=self.agents_config["trip"],  # type: ignore[index]
-                llm=self.llm,
-                allow_delegation=True,
-                max_iter=5,
-            )
-
-        @task
-        def weather_task(self) -> Task:
-            return Task(
-                config=self.tasks_config["weather_task"],  # type: ignore[index]
-                agent=self.weather_agent(),
-                tools=[WeatherTool()],
-            )
-
-        @task
-        def attraction_task(self) -> Task:
-            return Task(
-                config=self.tasks_config["attraction_task"],  # type: ignore[index]
-                agent=self.attractions_agent(),
-                tools=[AttractionTool()],
-                context=[self.weather_task()],
-            )
-
-        @crew
-        def crew(self) -> Crew:
-            return Crew(agents=self.agents, tasks=self.tasks, verbose=True)
-
-    return MultiAgentCrew().crew()
+    else:
+        return MultiAgentCrew().crew()
 
 
 def update_db(id: str, state: str):
@@ -153,26 +181,24 @@ def bucket_exists(s3_client: S3Client, bucket_name: str):
         return False
 
 
-def upload_text_to_rustfs(
-    client: S3Client, bucket_name: str, object_name: str, text_content: str
-):
+def upload_text_to_rustfs(client: S3Client, bucket: str, key: str, text_content: str):
     """
     Connects to RustFS, ensures a bucket exists, and uploads text content as an object.
 
     Args:
         client (s3client): boto3 client
-        bucket_name (str): Name of the bucket to upload to.
-        object_name (str): Name of the object (file) in the bucket.
+        bucket (str): Name of the bucket to upload to.
+        key (str): Name of the object (file) in the bucket.
         text_content (str): The string content to upload.
     """
     # --- 1. Ensure Bucket Exists ---
     try:
-        found = bucket_exists(client, bucket_name)
+        found = bucket_exists(client, bucket)
         if not found:
-            client.create_bucket(Bucket=bucket_name)
-            print(f"Bucket '{bucket_name}' created successfully.")
+            client.create_bucket(Bucket=bucket)
+            print(f"Bucket '{bucket}' created successfully.")
         else:
-            print(f"Bucket '{bucket_name}' already exists.")
+            print(f"Bucket '{bucket}' already exists.")
     except Exception as e:
         print(f"An unexpected error occurred during bucket handling: {e}")
         return
@@ -190,12 +216,12 @@ def upload_text_to_rustfs(
     # --- 3. Upload the Object ---
     try:
         client.put_object(
-            Bucket=bucket_name,
-            Key=object_name,
+            Bucket=bucket,
+            Key=key,
             Body=text_stream,
             ContentType="text/plain",  # Set the content type explicitly
         )
-        print(f"Successfully uploaded '{object_name}' to bucket '{bucket_name}'. ")
+        print(f"Successfully uploaded '{key}' to bucket '{bucket}'. ")
     except Exception as e:
         print(f"An unexpected error occurred during upload: {e}")
 
@@ -209,11 +235,11 @@ def main():
     channel = connection.channel()
 
     channel.queue_declare(queue=RABBITMQ_QUEUE)
+    decoder = msgspec.msgpack.Decoder(type=Payload)
 
     def callback(ch, method, properties, body):
         print(f" [x] Received {body}")
 
-        decoder = msgspec.msgpack.Decoder(type=Payload)
         data_decoded = decoder.decode(body)
 
         task_id = data_decoded.task_id
@@ -223,7 +249,7 @@ def main():
 
         update_db(task_id, "running")
 
-        crew = create_crew_yaml()
+        crew = create_crew_yaml(USE_MOCK)
         output = crew.kickoff(
             inputs={"city": city, "start_date": start_date, "end_date": end_date}
         )

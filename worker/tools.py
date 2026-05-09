@@ -6,11 +6,10 @@ import msgspec
 import openmeteo_requests
 import pandas as pd
 import requests_cache
+from appconfig import config
 from crewai.tools import BaseTool
 from pydantic import BaseModel, Field
 from retry_requests import retry
-
-from .appconfig import config
 
 API_KEY = config.api_key
 

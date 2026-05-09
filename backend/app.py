@@ -7,14 +7,22 @@ import boto3
 import msgspec
 import pandas as pd
 import pika
+import os
+import sys
+from pathlib import Path
 import psycopg
 from botocore.client import Config
 from fastapi import Depends, FastAPI, HTTPException
 from pydantic import BaseModel
 from types_boto3_s3.client import S3Client
 
-from .appconfig import config
-from .tools import get_coordinates
+if str(Path(__file__).parent) not in sys.path:
+    sys.path.append(str(Path(__file__).parent))
+if str(Path(__file__).parent.parent) not in sys.path:
+    sys.path.append(str(Path(__file__).parent.parent))
+
+from appconfig import config
+from utils import get_coordinates
 
 OLLAMA_HOST = config.ollama_host
 OLLAMA_PORT = config.ollama_port
@@ -58,9 +66,8 @@ class DBStatus(BaseModel):
     state: str
 
 
-DATABASE_URL = f"postgresql://{POSTGRES_USER}:{POSTGRES_PASS}@{POSTGRES_HOST}:{POSTGRES_PORT}/{POSTGRES_DB}"
-
 db_conn: Optional[psycopg.Connection] = None
+s3_client: Optional[S3Client] = None
 
 
 def create_table(db_conn: psycopg.Connection):
@@ -106,9 +113,20 @@ def insert_db(db_conn: psycopg.Connection) -> Optional[str]:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global db_conn
+    global s3_client
     try:
+        DATABASE_URL = f"postgresql://{POSTGRES_USER}:{POSTGRES_PASS}@{POSTGRES_HOST}:{POSTGRES_PORT}/{POSTGRES_DB}"
+
         db_conn = psycopg.connect(DATABASE_URL)
 
+        RUSTFS_ENDPOINT = f"http://{RUSTFS_HOST}:{RUSTFS_PORT}"
+        s3_client = boto3.client(
+            "s3",
+            endpoint_url=RUSTFS_ENDPOINT,
+            aws_access_key_id=RUSTFS_ACCESS_KEY,
+            aws_secret_access_key=RUSTFS_SECRET_KEY,
+            config=Config(signature_version="s3v4"),
+        )
         yield
 
     finally:
@@ -125,13 +143,19 @@ def get_db() -> psycopg.Connection:
     return db_conn
 
 
-def read_text_from_rustfs(client: S3Client, bucket_name: str, object_name: str):
+def get_s3_client():
+    if s3_client is None:
+        raise RuntimeError("s3 client is None")
+    return s3_client
+
+
+def read_text_from_rustfs(client: S3Client, bucket: str, key: str):
     """
     Connects to rustfs, retrieves an object, and returns its content as a string.
 
     Args:
-        bucket_name (str): Name of the bucket containing the object.
-        object_name (str): Name of the object (file) in the bucket.
+        bucket (str): Name of the bucket containing the object.
+        key (str): Name of the object (file) in the bucket.
 
     Returns:
         str: The content of the text file as a string, or None if an error occurs.
@@ -140,10 +164,8 @@ def read_text_from_rustfs(client: S3Client, bucket_name: str, object_name: str):
     try:
         # Get the object data from RustFS
         # The response object is a stream
-        response = client.get_object(Bucket=bucket_name, Key=object_name)
-        print(
-            f"Successfully initiated retrieval of '{object_name}' from bucket '{bucket_name}'."
-        )
+        response = client.get_object(Bucket=bucket, Key=key)
+        print(f"Successfully initiated retrieval of '{key}' from bucket '{bucket}'.")
 
         # --- 2. Read and Decode the Data ---
 
@@ -159,20 +181,14 @@ def read_text_from_rustfs(client: S3Client, bucket_name: str, object_name: str):
 
 
 @app.get("/tasks/{task_id}/output")
-async def get_task_output(task_id: str):
-    RUSTFS_ENDPOINT = f"{RUSTFS_HOST}:{RUSTFS_PORT}"
+async def get_task_output(task_id: str, client: S3Client = Depends(get_s3_client)):
 
-    client = boto3.client(
-        "s3",
-        endpoint_url=RUSTFS_ENDPOINT,
-        aws_access_key_id=RUSTFS_ACCESS_KEY,
-        aws_secret_access_key=RUSTFS_SECRET_KEY,
-        config=Config(signature_version="s3v4"),
-    )
     content = read_text_from_rustfs(client, RUSTFS_BUCKET, f"{task_id}.txt")
     if content is None:
         print("exception in backend")
-        raise HTTPException(status_code=400, detail="cant find obj")
+        raise HTTPException(
+            status_code=400, detail=f"couldnt find object with {task_id}.txt"
+        )
     return content
 
 
@@ -226,7 +242,6 @@ async def start_task(data: TripDetails, db_conn: psycopg.Connection = Depends(ge
     data_dict["task_id"] = task_id
     encoder = msgspec.msgpack.Encoder()
     body = encoder.encode(data_dict)
-
     channel.basic_publish(exchange="", routing_key=RABBITMQ_QUEUE, body=body)
     print("sent [x] data_dict")
     connection.close()

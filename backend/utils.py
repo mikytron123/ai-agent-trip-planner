@@ -2,10 +2,10 @@ from functools import lru_cache
 
 import httpx
 import msgspec
-
-from .appconfig import config
+from appconfig import config
 
 API_KEY = config.api_key
+USE_MOCK = config.use_mock
 
 
 class Result(msgspec.Struct):
@@ -22,6 +22,8 @@ class GeocodingSearchResponse(msgspec.Struct):
 
 @lru_cache
 def get_coordinates(city: str) -> tuple[float, float]:
+    if USE_MOCK:
+        return 0.0, 0.0
     geocoding_url = "https://geocoding-api.open-meteo.com/v1/search"
     geocoding_params = {"name": city, "count": 1, "language": "en", "format": "json"}
     resp = httpx.get(url=geocoding_url, params=geocoding_params)

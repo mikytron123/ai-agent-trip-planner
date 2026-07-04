@@ -1,8 +1,9 @@
-import uuid
 import os
 import sys
-import boto3
+import uuid
 from pathlib import Path
+
+import boto3
 import pytest
 from botocore.client import Config
 from testcontainers.core.container import DockerContainer

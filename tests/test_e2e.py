@@ -1,10 +1,11 @@
 import time
+from pathlib import Path
 
 import httpx
 import pytest
 from python_on_whales import docker
 from testcontainers.core.container import DockerContainer, Network
-from pathlib import Path
+
 
 @pytest.fixture(scope="module")
 def api_container():
@@ -64,9 +65,7 @@ def api_container():
     )
     api_container.with_env("RABBITMQ_QUEUE", "messages")
     api_container.with_env("RUSTFS_HOST", "rustfs")
-    api_container.with_env(
-        "RUSTFS_PORT", "9000"
-    )
+    api_container.with_env("RUSTFS_PORT", "9000")
     api_container.with_env("RUSTFS_ACCESS_KEY", "rustfsadmin")
     api_container.with_env("RUSTFS_SECRET_KEY", "rustfsadmin")
     api_container.with_env("RUSTFS_BUCKET", "llm")
@@ -75,9 +74,7 @@ def api_container():
     worker_container = DockerContainer(str(worker_img))
     worker_container.with_network(network)
     worker_container.with_env("USE_MOCK", "true")
-    worker_container.with_env(
-        "POSTGRES_HOST", "db"
-    )
+    worker_container.with_env("POSTGRES_HOST", "db")
     worker_container.with_env("POSTGRES_USER", "postgres")
     worker_container.with_env("POSTGRES_DB", "postgres")
     worker_container.with_env("POSTGRES_PASS", "postgres")
@@ -88,20 +85,14 @@ def api_container():
 
     worker_container.with_env("RABBITMQ_USER", "user")
     worker_container.with_env("RABBITMQ_PASS", "password")
-    worker_container.with_env(
-        "RABBITMQ_HOST", "rabbitmq"
-    )
+    worker_container.with_env("RABBITMQ_HOST", "rabbitmq")
     worker_container.with_env(
         "RABBITMQ_PORT",
         "5672",
     )
     worker_container.with_env("RABBITMQ_QUEUE", "messages")
-    worker_container.with_env(
-        "RUSTFS_HOST", "rustfs"
-    )
-    worker_container.with_env(
-        "RUSTFS_PORT", "9000"
-    )
+    worker_container.with_env("RUSTFS_HOST", "rustfs")
+    worker_container.with_env("RUSTFS_PORT", "9000")
     worker_container.with_env("RUSTFS_ACCESS_KEY", "rustfsadmin")
     worker_container.with_env("RUSTFS_SECRET_KEY", "rustfsadmin")
     worker_container.with_env("RUSTFS_BUCKET", "llm")
@@ -132,13 +123,12 @@ def test_e2e(api_container):
 
     assert resp.status_code == 202
     task_id = resp.json()["task_id"]
-    retries = 0 
-    while (httpx.get(f"{url}/tasks/{task_id}/status").json()["state"]!="done"):
-        if retries>=3:
+    retries = 0
+    while httpx.get(f"{url}/tasks/{task_id}/status").json()["state"] != "done":
+        if retries >= 3:
             pytest.fail("failed to get output after 3 retries")
         time.sleep(5)
         retries += 1
-    
 
     resp2 = httpx.get(f"{url}/tasks/{task_id}/output")
     assert resp2.status_code == 200

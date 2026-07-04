@@ -1,11 +1,13 @@
 import environ
 from dotenv import load_dotenv
 
+
 def use_mock_converter(x):
-    if isinstance(x,bool):
+    if isinstance(x, bool):
         return x
-    elif isinstance(x,str):
-        return x.casefold()=="true".casefold()
+    elif isinstance(x, str):
+        return x.casefold() == "true".casefold()
+
 
 @environ.config(prefix="")
 class AppConfig:
@@ -13,9 +15,7 @@ class AppConfig:
     ollama_port: str = environ.var(default="11434")
     ollama_llm: str = environ.var(default="granite3.2:8b")
     api_key: str = environ.var(default="")
-    use_mock: bool = environ.var(
-        default=False, converter=use_mock_converter
-    )
+    use_mock: bool = environ.var(default=False, converter=use_mock_converter)
     phoenix_collector_endpoint: str = environ.var(
         default="http://localhost:6006/v1/traces"
     )

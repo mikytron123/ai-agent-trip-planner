@@ -1,5 +1,5 @@
 from functools import lru_cache
-from typing import Literal, Type
+from typing import Literal
 
 import httpx
 import msgspec
@@ -62,7 +62,7 @@ class WeatherTool(BaseTool):
     description: str = (
         "Useful for getting daily weather for a city between a start_date and end_date"
     )
-    args_schema: Type[BaseModel] = WeatherToolSchema
+    args_schema: type[BaseModel] = WeatherToolSchema
 
     def _run(self, city: str, start_date: str, end_date: str) -> dict:
         latitude, longitude = get_coordinates(city)
@@ -129,7 +129,7 @@ class AttractionToolSchema(BaseModel):
 class AttractionTool(BaseTool):
     name: str = "Attractions Tool"
     description: str = "Useful for getting attractions for a city"
-    args_schema: Type[BaseModel] = AttractionToolSchema
+    args_schema: type[BaseModel] = AttractionToolSchema
 
     def _run(self, city: str, kinds: str) -> dict:
         latitude, longitude = get_coordinates(city)

@@ -2,22 +2,20 @@ import datetime
 import io
 import os
 import sys
+from pathlib import Path
 from unittest.mock import Mock
 
 import boto3
 import msgspec
 import pika
 import psycopg
-import sys
-import os
-from pathlib import Path
 from botocore.client import Config
 from botocore.exceptions import ClientError
 from crewai import LLM, Agent, Crew, Task
 from crewai.agents.agent_builder.base_agent import BaseAgent
 from crewai.project import CrewBase, agent, crew, task
-from phoenix.otel import register
 from types_boto3_s3.client import S3Client
+
 if str(Path(__file__).parent) not in sys.path:
     sys.path.append(str(Path(__file__).parent))
 if str(Path(__file__).parent.parent) not in sys.path:

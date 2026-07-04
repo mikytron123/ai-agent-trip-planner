@@ -1,15 +1,13 @@
 import datetime
+import sys
 import uuid
 from contextlib import asynccontextmanager
-from typing import Optional
+from pathlib import Path
 
 import boto3
 import msgspec
 import pandas as pd
 import pika
-import os
-import sys
-from pathlib import Path
 import psycopg
 from botocore.client import Config
 from fastapi import Depends, FastAPI, HTTPException
@@ -66,8 +64,8 @@ class DBStatus(BaseModel):
     state: str
 
 
-db_conn: Optional[psycopg.Connection] = None
-s3_client: Optional[S3Client] = None
+db_conn: psycopg.Connection | None = None
+s3_client: S3Client | None = None
 
 
 def create_table(db_conn: psycopg.Connection):
@@ -81,7 +79,7 @@ def create_table(db_conn: psycopg.Connection):
         db_conn.commit()
 
 
-def insert_db(db_conn: psycopg.Connection) -> Optional[str]:
+def insert_db(db_conn: psycopg.Connection) -> str | None:
     """Insert submitted job into db"""
 
     cursor = None

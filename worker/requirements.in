@@ -3,7 +3,7 @@ msgspec
 boto3
 types-boto3[essential]
 psycopg[binary,pool]
-httpx
+httpx2
 pydantic
 openmeteo_requests
 requests_cache

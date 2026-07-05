@@ -1,7 +1,7 @@
 from functools import lru_cache
-from typing import Literal
+from typing import Literal, override
 
-import httpx
+import httpx2
 import msgspec
 import openmeteo_requests
 import pandas as pd
@@ -30,7 +30,7 @@ class GeocodingSearchResponse(msgspec.Struct):
 def get_coordinates(city: str) -> tuple[float, float]:
     geocoding_url = "https://geocoding-api.open-meteo.com/v1/search"
     geocoding_params = {"name": city, "count": 1, "language": "en", "format": "json"}
-    resp = httpx.get(url=geocoding_url, params=geocoding_params)
+    resp = httpx2.get(url=geocoding_url, params=geocoding_params)
     if resp.status_code < 200 or resp.status_code > 200:
         raise ValueError(
             f"Non 200 status code {resp.status_code}, {resp.content.decode()}"
@@ -64,6 +64,7 @@ class WeatherTool(BaseTool):
     )
     args_schema: type[BaseModel] = WeatherToolSchema
 
+    @override
     def _run(self, city: str, start_date: str, end_date: str) -> dict:
         latitude, longitude = get_coordinates(city)
 
@@ -131,6 +132,7 @@ class AttractionTool(BaseTool):
     description: str = "Useful for getting attractions for a city"
     args_schema: type[BaseModel] = AttractionToolSchema
 
+    @override
     def _run(self, city: str, kinds: str) -> dict:
         latitude, longitude = get_coordinates(city)
         trip_url = "https://api.opentripmap.com/0.1/en/places/radius"
@@ -145,5 +147,5 @@ class AttractionTool(BaseTool):
             "apikey": API_KEY,
         }
 
-        resp = httpx.get(url=trip_url, params=params).json()
+        resp = httpx2.get(url=trip_url, params=params).json()
         return resp

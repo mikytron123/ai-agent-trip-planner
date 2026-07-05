@@ -4,8 +4,8 @@ from dotenv import load_dotenv
 
 @environ.config(prefix="")
 class AppConfig:
-    server_host = environ.var(default="localhost")
-    server_port = environ.var(default="8000")
+    server_host: str = environ.var(default="localhost")
+    server_port: str = environ.var(default="8000")
 
 
 load_dotenv()

@@ -1,4 +1,5 @@
 shiny
-httpx
+httpx2
 dotenv
 environ-config
+msgspec

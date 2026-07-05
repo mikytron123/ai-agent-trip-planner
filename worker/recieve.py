@@ -14,6 +14,8 @@ from botocore.exceptions import ClientError
 from crewai import LLM, Agent, Crew, Task
 from crewai.agents.agent_builder.base_agent import BaseAgent
 from crewai.project import CrewBase, agent, crew, task
+from pika.adapters.blocking_connection import BlockingChannel
+from pika.spec import Basic, BasicProperties
 from types_boto3_s3.client import S3Client
 
 if str(Path(__file__).parent) not in sys.path:
@@ -62,8 +64,8 @@ class MultiAgentCrew:
     agents: list[BaseAgent]
     tasks: list[Task]
 
-    agents_config = "config/agents.yaml"
-    tasks_config = "config/task.yaml"
+    agents_config: str = "config/agents.yaml"
+    tasks_config: str = "config/task.yaml"
 
     @agent
     def weather_agent(self) -> Agent:
@@ -235,7 +237,12 @@ def main():
     channel.queue_declare(queue=RABBITMQ_QUEUE)
     decoder = msgspec.msgpack.Decoder(type=Payload)
 
-    def callback(ch, method, properties, body):
+    def callback(
+        ch: BlockingChannel,
+        method: Basic.Deliver,
+        properties: BasicProperties,
+        body: bytes,
+    ):
         print(f" [x] Received {body}")
 
         data_decoded = decoder.decode(body)

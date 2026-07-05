@@ -179,7 +179,9 @@ def read_text_from_rustfs(client: S3Client, bucket: str, key: str):
 
 
 @app.get("/tasks/{task_id}/output")
-async def get_task_output(task_id: str, client: S3Client = Depends(get_s3_client)):
+async def get_task_output(
+    task_id: str, client: S3Client = Depends(get_s3_client)
+) -> str:
 
     content = read_text_from_rustfs(client, RUSTFS_BUCKET, f"{task_id}.txt")
     if content is None:

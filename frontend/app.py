@@ -1,30 +1,33 @@
 import datetime
+from typing import cast
 
-import httpx
+import httpx2
+import msgspec
 from appconfig import config
+from models import DBStatus, TaskDetails
 from shiny import App, Inputs, Outputs, Session, reactive, render, ui
 
 SERVER_HOST = config.server_host
 SERVER_PORT = config.server_port
-task_id = None
+task_id: str | None = None
 
 
 def poll_func() -> str:
     if task_id is not None:
-        resp = httpx.get(
-            f"http://{SERVER_HOST}:{SERVER_PORT}/tasks/{task_id}/status"
-        ).json()
-        return resp["state"]
+        resp = httpx2.get(f"http://{SERVER_HOST}:{SERVER_PORT}/tasks/{task_id}/status")
+        decoder = msgspec.json.Decoder(type=DBStatus)
+        db_state = decoder.decode(resp.content)
+        return db_state.state
     return "missing"
 
 
 def task_output() -> str:
     if task_id is not None:
-        resp = httpx.get(f"http://{SERVER_HOST}:{SERVER_PORT}/tasks/{task_id}/output")
+        resp = httpx2.get(f"http://{SERVER_HOST}:{SERVER_PORT}/tasks/{task_id}/output")
         if resp.status_code > 300:
             return "Error"
         else:
-            return str(resp.json())
+            return resp.text
     return ""
 
 
@@ -77,15 +80,19 @@ def server(input: Inputs, output: Outputs, session: Session):
     def res():
         global task_id
         start_date, end_date = input.date_range()
+
+        start_date = cast(datetime.date, start_date)
+        end_date = cast(datetime.date, end_date)
+
         param = {
             "city": input.city(),
             "start_date": str(start_date),
             "end_date": str(end_date),
         }
-        resp = httpx.post(
-            f"http://{SERVER_HOST}:{SERVER_PORT}/task/start", json=param
-        ).json()
-        task_id = resp["task_id"]
+        resp = httpx2.post(f"http://{SERVER_HOST}:{SERVER_PORT}/task/start", json=param)
+        decoder = msgspec.json.Decoder(type=TaskDetails)
+        task_details = decoder.decode(resp.content)
+        task_id = task_details.task_id
         polling_status.set(True)
 
     @render.ui

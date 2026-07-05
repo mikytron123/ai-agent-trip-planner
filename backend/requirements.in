@@ -1,7 +1,7 @@
 fastapi[standard]
 pydantic
 msgspec
-httpx
+httpx2
 pandas
 pika
 psycopg[binary,pool]

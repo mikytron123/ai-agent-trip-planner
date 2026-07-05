@@ -118,7 +118,7 @@ async def lifespan(app: FastAPI):
         db_conn = psycopg.connect(DATABASE_URL)
 
         RUSTFS_ENDPOINT = f"http://{RUSTFS_HOST}:{RUSTFS_PORT}"
-        s3_client = boto3.client(
+        s3_client = boto3.client( #pyright: ignore[reportUnknownMemberType]
             "s3",
             endpoint_url=RUSTFS_ENDPOINT,
             aws_access_key_id=RUSTFS_ACCESS_KEY,

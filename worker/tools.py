@@ -133,7 +133,16 @@ class AttractionTool(BaseTool):
     args_schema: type[BaseModel] = AttractionToolSchema
 
     @override
-    def _run(self, city: str, kinds: str) -> dict:
+    def _run(
+        self,
+        city: str,
+        kinds: (
+            Literal["museums"]
+            | Literal["religion"]
+            | Literal["architecture"]
+            | Literal["natural"]
+        ),
+    ) -> dict:
         latitude, longitude = get_coordinates(city)
         trip_url = "https://api.opentripmap.com/0.1/en/places/radius"
         params = {

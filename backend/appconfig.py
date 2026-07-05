@@ -2,11 +2,10 @@ import environ
 from dotenv import load_dotenv
 
 
-def use_mock_converter(x):
+def use_mock_converter(x:str | bool)->bool:
     if isinstance(x, bool):
         return x
-    elif isinstance(x, str):
-        return x.casefold() == "true".casefold()
+    return x.casefold() == "true".casefold()
 
 
 @environ.config(prefix="")

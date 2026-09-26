@@ -185,7 +185,6 @@ async def get_task_output(
 
     content = read_text_from_rustfs(client, RUSTFS_BUCKET, f"{task_id}.txt")
     if content is None:
-        print("exception in backend")
         raise HTTPException(
             status_code=400, detail=f"couldnt find object with {task_id}.txt"
         )
